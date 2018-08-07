@@ -1,0 +1,152 @@
+---
+title: 'Practical Machine Learning Course Project'
+output: html_document
+---
+##1. Overview
+The aim of this project is to predict the manner in which six participants perform a barbell lift.The participants were asked to perform the exercises correctly and incorrectly with accelerometers placed on the belt, forearm, arm, and dumbell for recording purposes.  
+
+The following steps were taken:
+
+1. Database and Data Processing
+2. Loading and Cleaning Data
+3. Correlation
+4. Prediction Model 
+  i.   Random Forest
+  ii.  Decision Trees
+  iii. Generalized Boosted Model
+  
+5. Run the Model to the Test Data
+
+
+
+## 2. Database and Data Processing
+```{r setup, include=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+library(knitr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(corrplot)
+set.seed(12345)
+```
+
+## 3.Loading and Cleaning Data
+```{r}
+trainingset <- read.csv("./pml-training.csv")
+testset <- read.csv("./pml-testing.csv")
+
+Train_part  <- createDataPartition(trainingset$classe, p=0.7, list=FALSE)
+TrainGrp <- trainingset[Train_part, ]
+TestGrp  <- trainingset[-Train_part, ]
+dim(TrainGrp)
+
+dim(TestGrp)
+```
+
+A total of 160 variables present in this dataset.In this stage, the variables that have nearly zero variance,contain NA terms and identification variables have been removed.
+
+
+```{r}
+NZVar <- nearZeroVar(TrainGrp)
+TrainGrp <- TrainGrp[, -NZVar]
+TestGrp  <- TestGrp[, -NZVar]
+dim(TrainGrp)
+
+dim(TestGrp)
+
+navar    <- sapply(TrainGrp, function(x) mean(is.na(x))) > 0.95
+TrainGrp <- TrainGrp[, navar==FALSE]
+TestGrp  <- TestGrp[, navar==FALSE]
+dim(TrainGrp)
+
+TrainGrp <- TrainGrp[, -(1:5)]
+TestGrp  <- TestGrp[, -(1:5)]
+dim(TrainGrp)
+
+dim(TestGrp)
+```
+
+As a result of the cleaning process 54 variables left.
+
+##3. Correlation
+A correlation plot is done to look for the relationship between variables.
+
+```{r}
+cormx <- cor(TrainGrp[, -54])
+corrplot(cormx, order = "FPC", method = "color", type = "lower", 
+         tl.cex = 0.8, tl.col = rgb(0, 0, 0))
+```
+
+In the plot above, darker gradient correspond to high correlation.  However, the compact analysis such as a PCA (Principal Components Analysis) could be made as pre-processing phase to the datasets. Due to a slight correlation, this step will not be used for this stage.
+
+##4. Prediction Model
+The Random Forest, Decision Tree and Generalized Boosted Model were used to model the training set and finally select the best fit and accurate model to predict the outcome variable in the testing set.
+
+###i. Random Forest
+
+```{r}
+set.seed(12345)
+RFctrl <- trainControl(method="cv", number=3, verboseIter=FALSE)
+RFmodFit <- train(classe ~ ., data=TrainGrp, method="rf",trControl=RFctrl)
+RFmodFit$finalModel
+
+RFpredict <- predict(RFmodFit, newdata=TestGrp)
+RFconfMat <- confusionMatrix(RFpredict, TestGrp$classe)
+RFconfMat
+
+plot(RFconfMat$table, col = RFconfMat$byClass, 
+     main = paste("Random Forest: Accuracy =",
+                  round(RFconfMat$overall['Accuracy'], 4)))
+```
+###ii. Decision Trees
+
+```{r}
+set.seed(12345)
+DTmodFit <- rpart(classe ~ ., data=TrainGrp, method="class")
+fancyRpartPlot(DTmodFit)
+
+
+DTpredict <- predict(DTmodFit, newdata=TestGrp, type="class")
+DTconfMat <- confusionMatrix(DTpredict, TestGrp$classe)
+DTconfMat
+
+plot(DTconfMat$table, col = DTconfMat$byClass, 
+     main = paste("Decision Tree: Accuracy =",
+                  round(DTconfMat$overall['Accuracy'], 4)))
+```
+
+###iii. Generalized Boosted Model
+```{r}
+set.seed(12345)
+GBMctrl <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+GBMmodFit  <- train(classe ~ ., data=TrainGrp, method = "gbm",
+                    trControl = GBMctrl, verbose = FALSE)
+GBMmodFit$finalModel
+
+GBMpredict <- predict(GBMmodFit, newdata=TestGrp)
+GBMconfMat <- confusionMatrix(GBMpredict, TestGrp$classe)
+GBMconfMat
+
+plot(GBMconfMat$table, col = GBMconfMat$byClass, 
+     main = paste("GBM: Accuracy =", round(GBMconfMat$overall['Accuracy'], 4)))
+```
+
+
+The 3 regression modeling methods accuracy are:
+a.	Random Forest: 0.9964
+b.	Decision Tree: 0.7368
+c.	GBM: 0.9857
+
+
+##5. Run the Model to the Test Data
+
+The Random Forest model is the best fit and accurate and offers the maximum accuracy of 99.64%, This model is used to predict the test data class variable.
+
+```{r}
+TESTpredict <- predict(RFmodFit, newdata=testset)
+TESTpredict
+
+```
+
